@@ -92,6 +92,11 @@ function setupSignaturePad() {
     canvas.width = canvas.offsetWidth * ratio;
     canvas.height = canvas.offsetHeight * ratio;
     ctx.scale(ratio, ratio);
+    // Isi latar putih dulu di data pixel-nya (bukan cuma CSS) - supaya saat
+    // diekspor sebagai JPEG (yang tidak mendukung transparan), latarnya
+    // putih, bukan berubah hitam.
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.offsetWidth, canvas.offsetHeight);
     ctx.lineWidth = 2.2;
     ctx.lineCap = 'round';
     ctx.strokeStyle = '#1f2a27';
@@ -113,7 +118,8 @@ function setupSignaturePad() {
   canvas.addEventListener('touchmove', move, { passive: false });
   canvas.addEventListener('touchend', end);
   document.getElementById('btn-clear-sig').addEventListener('click', () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.offsetWidth, canvas.offsetHeight);
   });
   signaturePad = canvas;
 }
@@ -127,13 +133,28 @@ async function submitCheckin(info) {
   const btn = document.getElementById('btn-checkin');
   btn.disabled = true; btn.textContent = 'Menyimpan...';
 
-  // Data dikirim lewat parameter URL (JSONP), jadi tanda tangan dikompres
-  // dan dibatasi ukurannya agar tidak gagal karena URL kepanjangan.
+  // Data dikirim lewat parameter URL (JSONP), jadi tanda tangan HARUS kecil
+  // supaya URL tidak kepanjangan (penyebab "Gagal memanggil API" kalau tanda
+  // tangannya rumit/detail). Gambar diperkecil dulu ke lebar tetap sebelum
+  // diubah jadi teks, terlepas dari seberapa detail coretannya.
   let tandaTanganBase64 = '';
   try {
-    tandaTanganBase64 = signaturePad.toDataURL('image/jpeg', 0.6);
-    if (tandaTanganBase64.length > 25000) {
-      tandaTanganBase64 = ''; // terlalu besar, lewati saja - kehadiran tetap tercatat
+    const maxW = 220;
+    let exportSource = signaturePad;
+    if (signaturePad.offsetWidth > maxW) {
+      const scale = maxW / signaturePad.offsetWidth;
+      const tmp = document.createElement('canvas');
+      tmp.width = maxW;
+      tmp.height = Math.round(signaturePad.offsetHeight * scale);
+      const tctx = tmp.getContext('2d');
+      tctx.fillStyle = '#ffffff';
+      tctx.fillRect(0, 0, tmp.width, tmp.height);
+      tctx.drawImage(signaturePad, 0, 0, tmp.width, tmp.height);
+      exportSource = tmp;
+    }
+    tandaTanganBase64 = exportSource.toDataURL('image/jpeg', 0.5);
+    if (tandaTanganBase64.length > 9000) {
+      tandaTanganBase64 = ''; // masih terlalu besar, lewati saja - kehadiran tetap tercatat
       msgEl.innerHTML = '<span style="color:var(--muted)">Catatan: tanda tangan tidak disertakan (terlalu besar), kehadiran tetap disimpan.</span>';
     }
   } catch (e) {}
