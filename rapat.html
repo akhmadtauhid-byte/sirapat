@@ -146,11 +146,24 @@ let rapatData = null;
 if (!rapatId) {
   document.getElementById('hdr-judul').textContent = 'ID rapat tidak ditemukan';
 } else {
-  loadInfo();
-  loadPeserta();
-  loadMateri();
-  loadAbsensi();
-  loadNotulen();
+  initPage();
+}
+
+// Memuat semua data rapat lewat SATU panggilan (getRapatDetail), bukan 5-6
+// panggilan sekaligus - supaya tidak membebani Apps Script dengan banyak
+// eksekusi bersamaan (penyebab halaman terasa lambat/lama saat pertama dibuka).
+async function initPage() {
+  const detail = await apiGet('getRapatDetail', { rapatId });
+  if (detail.error) {
+    document.getElementById('hdr-judul').textContent = detail.error;
+    return;
+  }
+  rapatData = detail.rapat;
+  renderInfo(detail.rapat);
+  renderPeserta(detail.peserta);
+  renderMateri(detail.materi);
+  renderAbsensi(detail.peserta, detail.absensi);
+  renderNotulen(detail.notulen);
 }
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -166,6 +179,10 @@ async function loadInfo() {
   const r = await apiGet('getRapat', { id: rapatId });
   if (r.error) { document.getElementById('hdr-judul').textContent = r.error; return; }
   rapatData = r;
+  renderInfo(r);
+}
+
+function renderInfo(r) {
   document.getElementById('hdr-judul').textContent = r.Judul;
   document.getElementById('hdr-sub').textContent = `${r.Tanggal} | ${r.Waktu} | ${r.Tempat}`;
   document.getElementById('info-card').innerHTML = `
@@ -194,8 +211,12 @@ function inviteBadge(status) {
 }
 
 async function loadPeserta() {
-  const el = document.getElementById('peserta-list');
   const data = await apiGet('listPeserta', { rapatId });
+  renderPeserta(data);
+}
+
+function renderPeserta(data) {
+  const el = document.getElementById('peserta-list');
   if (!data.length) { el.innerHTML = '<div class="empty-state">Belum ada peserta ditambahkan.</div>'; return; }
   el.innerHTML = `<table><thead><tr><th>Nama</th><th>Jabatan</th><th>No. WA</th><th>Status</th><th></th></tr></thead><tbody>
     ${data.map(p => `<tr>
@@ -248,8 +269,12 @@ document.getElementById('btn-kirim-undangan').addEventListener('click', async (e
 
 // ---------- MATERI ----------
 async function loadMateri() {
-  const el = document.getElementById('materi-list');
   const data = await apiGet('listMateri', { rapatId });
+  renderMateri(data);
+}
+
+function renderMateri(data) {
+  const el = document.getElementById('materi-list');
   if (!data.length) { el.innerHTML = '<div class="empty-state">Belum ada materi.</div>'; return; }
   el.innerHTML = `<table><thead><tr><th>Nama</th><th>Deskripsi</th><th>Link</th><th></th></tr></thead><tbody>
     ${data.map(m => `<tr>
@@ -283,9 +308,15 @@ async function deleteMateri(id) {
 
 // ---------- ABSENSI ----------
 async function loadAbsensi() {
+  const [pesertaData, data] = await Promise.all([
+    apiGet('listPeserta', { rapatId }),
+    apiGet('listAbsensi', { rapatId })
+  ]);
+  renderAbsensi(pesertaData, data);
+}
+
+function renderAbsensi(pesertaData, data) {
   const el = document.getElementById('absensi-list');
-  const pesertaData = await apiGet('listPeserta', { rapatId });
-  const data = await apiGet('listAbsensi', { rapatId });
   const persen = pesertaData.length ? Math.round((data.length / pesertaData.length) * 100) : 0;
   document.getElementById('absensi-summary').innerHTML =
     `<span class="badge green">${data.length} hadir</span> dari ${pesertaData.length} diundang (${persen}%)`;
@@ -327,8 +358,12 @@ document.getElementById('ma-save').addEventListener('click', async () => {
 
 // ---------- NOTULEN ----------
 async function loadNotulen() {
-  const el = document.getElementById('notulen-list');
   const data = await apiGet('listNotulen', { rapatId });
+  renderNotulen(data);
+}
+
+function renderNotulen(data) {
+  const el = document.getElementById('notulen-list');
   if (!data.length) { el.innerHTML = '<div class="empty-state">Belum ada notulen.</div>'; return; }
   el.innerHTML = data.map(n => `
     <div class="card" style="background:#fafcfb">
