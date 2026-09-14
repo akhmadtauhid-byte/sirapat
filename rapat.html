@@ -40,7 +40,10 @@
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <h3 style="margin:0">Daftar Peserta &amp; Status Undangan</h3>
-        <button class="btn" id="btn-kirim-undangan">Kirim Undangan via WhatsApp ke Semua</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a class="btn secondary small" id="link-cetak-undangan" target="_blank">🖨️ Cetak Surat Undangan</a>
+          <button class="btn" id="btn-kirim-undangan">Kirim Undangan via WhatsApp ke Semua</button>
+        </div>
       </div>
       <div id="peserta-list" style="margin-top:12px"><div class="loading">Memuat...</div></div>
       <pre id="undangan-debug" style="display:none;margin-top:12px;background:#fafcfb;border:1px solid var(--border);border-radius:8px;padding:10px;font-size:0.75rem;white-space:pre-wrap;word-break:break-all;"></pre>
@@ -60,8 +63,11 @@
       <button class="btn" id="btn-add-materi">Tambah Materi</button>
     </div>
     <div class="card">
-      <h3>Daftar Materi</h3>
-      <div id="materi-list"><div class="loading">Memuat...</div></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0">Daftar Materi</h3>
+        <a class="btn secondary small" id="link-cetak-materi" target="_blank">🖨️ Cetak Daftar Materi</a>
+      </div>
+      <div id="materi-list" style="margin-top:12px"><div class="loading">Memuat...</div></div>
     </div>
   </div>
 
@@ -77,7 +83,10 @@
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <h3 style="margin:0">Rekap Kehadiran</h3>
-        <button class="btn secondary" id="btn-add-manual-absen">+ Tambah Manual</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a class="btn secondary small" id="link-cetak-absensi" target="_blank">🖨️ Cetak Daftar Hadir</a>
+          <button class="btn secondary" id="btn-add-manual-absen">+ Tambah Manual</button>
+        </div>
       </div>
       <div id="absensi-summary" style="margin:10px 0"></div>
       <div id="absensi-list"><div class="loading">Memuat...</div></div>
@@ -99,8 +108,11 @@
       <button class="btn" id="btn-add-notulen">Simpan Notulen</button>
     </div>
     <div class="card">
-      <h3>Riwayat Notulen</h3>
-      <div id="notulen-list"><div class="loading">Memuat...</div></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0">Riwayat Notulen</h3>
+        <a class="btn secondary small" id="link-cetak-notulen" target="_blank">🖨️ Cetak Notulen</a>
+      </div>
+      <div id="notulen-list" style="margin-top:12px"><div class="loading">Memuat...</div></div>
     </div>
   </div>
 
@@ -125,6 +137,11 @@
 const params = new URLSearchParams(location.search);
 const rapatId = params.get('id');
 let rapatData = null;
+
+['undangan', 'materi', 'absensi', 'notulen'].forEach(j => {
+  const el = document.getElementById('link-cetak-' + j);
+  if (el) el.href = 'cetak.html?id=' + encodeURIComponent(rapatId || '') + '&jenis=' + j;
+});
 
 if (!rapatId) {
   document.getElementById('hdr-judul').textContent = 'ID rapat tidak ditemukan';
