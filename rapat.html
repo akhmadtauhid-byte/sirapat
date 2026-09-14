@@ -43,6 +43,7 @@
         <button class="btn" id="btn-kirim-undangan">Kirim Undangan via WhatsApp ke Semua</button>
       </div>
       <div id="peserta-list" style="margin-top:12px"><div class="loading">Memuat...</div></div>
+      <pre id="undangan-debug" style="display:none;margin-top:12px;background:#fafcfb;border:1px solid var(--border);border-radius:8px;padding:10px;font-size:0.75rem;white-space:pre-wrap;word-break:break-all;"></pre>
     </div>
   </div>
 
@@ -220,6 +221,11 @@ document.getElementById('btn-kirim-undangan').addEventListener('click', async (e
   btn.disabled = false; btn.textContent = 'Kirim Undangan via WhatsApp ke Semua';
   if (result.error) { showToast('Gagal: ' + result.error); return; }
   showToast(`Terkirim: ${result.terkirim}, Gagal: ${result.gagal}`);
+  const debugEl = document.getElementById('undangan-debug');
+  if (result.debug && result.debug.length) {
+    debugEl.style.display = 'block';
+    debugEl.textContent = 'Detail respons pengiriman:\n' + result.debug.join('\n');
+  }
   loadPeserta();
 });
 
