@@ -9,7 +9,7 @@
  * ke nilai yang benar sebelum publish ulang ke GitHub Pages.
  * ============================================================
  */
-const API_URL = 'PASTE_API_URL_APPS_SCRIPT_DISINI';
+const API_URL = 'https://script.google.com/macros/s/AKfycbyrMW5I-I5YN2FDHYc-FedW-QruqGNpTkvYTLKP2tQ8xWoi0fWwxkYcuV9zoQ4KVGX5/exec';
 
 /**
  * KOP SURAT - dipakai di halaman cetak (cetak.html) untuk dokumen undangan,
