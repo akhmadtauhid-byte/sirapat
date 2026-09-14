@@ -1,21 +1,51 @@
 /**
- * Helper pemanggilan API Apps Script.
- * POST menggunakan Content-Type text/plain agar tidak memicu CORS preflight
- * (keterbatasan Apps Script Web App yang tidak menangani request OPTIONS).
+ * Helper pemanggilan API Apps Script menggunakan teknik JSONP.
+ *
+ * Kenapa JSONP (bukan fetch() biasa)? Apps Script Web App tidak mengirim
+ * header CORS pada responsnya, sehingga fetch() lintas domain (GitHub Pages
+ * -> script.google.com) diblokir browser. Memuat data lewat tag <script>
+ * tidak tunduk pada aturan CORS, jadi ini cara paling andal untuk kombinasi
+ * Google Apps Script + GitHub Pages.
  */
+
+let _jsonpCounter = 0;
+
+function jsonpRequest(action, params) {
+  return new Promise((resolve, reject) => {
+    const callbackName = '_sirapat_cb_' + (_jsonpCounter++) + '_' + Date.now();
+    const qs = new URLSearchParams({ action, callback: callbackName, ...(params || {}) });
+    const script = document.createElement('script');
+    script.src = `${API_URL}?${qs.toString()}`;
+
+    const cleanup = () => {
+      delete window[callbackName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error('Waktu permintaan habis. Periksa koneksi atau URL API_URL di config.js.'));
+    }, 20000);
+
+    window[callbackName] = (data) => {
+      clearTimeout(timer);
+      cleanup();
+      resolve(data);
+    };
+    script.onerror = () => {
+      clearTimeout(timer);
+      cleanup();
+      reject(new Error('Gagal memanggil API. Periksa API_URL di config.js dan status deployment Apps Script.'));
+    };
+    document.body.appendChild(script);
+  });
+}
+
 async function apiGet(action, params) {
-  const qs = new URLSearchParams({ action, ...(params || {}) });
-  const res = await fetch(`${API_URL}?${qs.toString()}`);
-  return res.json();
+  return jsonpRequest(action, params);
 }
 
 async function apiPost(action, payload) {
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action, ...(payload || {}) })
-  });
-  return res.json();
+  return jsonpRequest(action, { payload: JSON.stringify(payload || {}) });
 }
 
 function showToast(msg) {
