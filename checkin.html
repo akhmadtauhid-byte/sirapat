@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Absensi Rapat - SIRAPAT</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="checkin-center">
+  <div class="checkin-card" id="card">
+    <div class="loading">Memuat data rapat...</div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const rapatId = params.get('rapat');
+const token = params.get('token');
+const card = document.getElementById('card');
+
+let signaturePad = null;
+let selectedPesertaId = '';
+
+async function init() {
+  if (!rapatId || !token) {
+    card.innerHTML = '<h2>Link tidak valid</h2><p>Silakan scan ulang QR code yang tersedia di lokasi rapat.</p>';
+    return;
+  }
+  const info = await apiGet('getCheckinInfo', { rapatId, token });
+  if (info.error) {
+    card.innerHTML = `<h2>Tidak dapat check-in</h2><p>${escapeHtml(info.error)}</p>`;
+    return;
+  }
+  renderForm(info);
+}
+
+function renderForm(info) {
+  card.innerHTML = `
+    <h2>Absensi Rapat</h2>
+    <p><strong>${escapeHtml(info.judul)}</strong><br>
+    ${escapeHtml(info.tanggal)} - ${escapeHtml(info.waktu)}<br>
+    ${escapeHtml(info.tempat)}</p>
+
+    <div class="form-row">
+      <label>Pilih nama Anda (jika terdaftar)</label>
+      <select id="ci-peserta">
+        <option value="">-- Peserta tidak terdaftar / walk-in --</option>
+        ${info.peserta.map(p => `<option value="${p.id}" data-nama="${escapeHtml(p.nama)}" data-jabatan="${escapeHtml(p.jabatan)}">${escapeHtml(p.nama)} - ${escapeHtml(p.jabatan)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-row" id="wrap-nama">
+      <label>Nama Lengkap *</label>
+      <input type="text" id="ci-nama">
+    </div>
+    <div class="form-row" id="wrap-jabatan">
+      <label>Jabatan / Unit</label>
+      <input type="text" id="ci-jabatan">
+    </div>
+    <div class="form-row">
+      <label>Tanda Tangan Digital</label>
+      <canvas class="sig-pad" id="sig-pad"></canvas>
+      <button type="button" class="btn secondary small" id="btn-clear-sig" style="margin-top:6px">Hapus Tanda Tangan</button>
+    </div>
+    <button class="btn" id="btn-checkin" style="width:100%">Konfirmasi Hadir</button>
+    <div id="ci-msg" style="margin-top:10px;font-size:0.85rem"></div>
+  `;
+
+  document.getElementById('ci-peserta').addEventListener('change', (e) => {
+    const opt = e.target.selectedOptions[0];
+    selectedPesertaId = e.target.value;
+    document.getElementById('ci-nama').value = opt.dataset.nama || '';
+    document.getElementById('ci-jabatan').value = opt.dataset.jabatan || '';
+  });
+
+  setupSignaturePad();
+
+  document.getElementById('btn-checkin').addEventListener('click', () => submitCheckin(info));
+}
+
+function setupSignaturePad() {
+  const canvas = document.getElementById('sig-pad');
+  const ctx = canvas.getContext('2d');
+  function resize() {
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = canvas.offsetWidth * ratio;
+    canvas.height = canvas.offsetHeight * ratio;
+    ctx.scale(ratio, ratio);
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#1f2a27';
+  }
+  resize();
+  let drawing = false;
+  function pos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const point = e.touches ? e.touches[0] : e;
+    return { x: point.clientX - rect.left, y: point.clientY - rect.top };
+  }
+  function start(e) { drawing = true; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); }
+  function move(e) { if (!drawing) return; const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault(); }
+  function end() { drawing = false; }
+  canvas.addEventListener('mousedown', start);
+  canvas.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', end);
+  canvas.addEventListener('touchstart', start, { passive: false });
+  canvas.addEventListener('touchmove', move, { passive: false });
+  canvas.addEventListener('touchend', end);
+  document.getElementById('btn-clear-sig').addEventListener('click', () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  });
+  signaturePad = canvas;
+}
+
+async function submitCheckin(info) {
+  const nama = document.getElementById('ci-nama').value.trim();
+  const jabatan = document.getElementById('ci-jabatan').value.trim();
+  const msgEl = document.getElementById('ci-msg');
+  if (!nama) { msgEl.innerHTML = '<span style="color:var(--danger)">Nama wajib diisi</span>'; return; }
+
+  const btn = document.getElementById('btn-checkin');
+  btn.disabled = true; btn.textContent = 'Menyimpan...';
+
+  let tandaTanganBase64 = '';
+  try { tandaTanganBase64 = signaturePad.toDataURL('image/png'); } catch (e) {}
+
+  const payload = {
+    rapatId, token, pesertaId: selectedPesertaId, nama, jabatan, tandaTanganBase64
+  };
+  const result = await apiPost('checkIn', payload);
+  btn.disabled = false; btn.textContent = 'Konfirmasi Hadir';
+
+  if (result.error) {
+    msgEl.innerHTML = `<span style="color:var(--danger)">${escapeHtml(result.error)}</span>`;
+    return;
+  }
+  card.innerHTML = `
+    <h2>Terima kasih!</h2>
+    <p>Kehadiran <strong>${escapeHtml(nama)}</strong> telah tercatat pukul ${escapeHtml(result.waktu)}.</p>
+    <p style="color:var(--muted);font-size:0.85rem">${escapeHtml(info.judul)}</p>
+  `;
+}
+
+init();
+</script>
+</body>
+</html>

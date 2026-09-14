@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIRAPAT - Sistem Rekap Agenda Rapat</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div>
+    <h1>SIRAPAT</h1>
+    <div class="subtitle">Sistem Rekap Agenda Rapat - RSU Allam Medica</div>
+  </div>
+</header>
+
+<main>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="rekap">Rekap</button>
+    <button class="tab-btn" data-tab="daftar">Daftar Rapat</button>
+  </div>
+
+  <div id="tab-rekap" class="tab-content active">
+    <div id="rekap-stats" class="grid-stats"></div>
+    <div class="card">
+      <h2>Rekap Semua Rapat</h2>
+      <div id="rekap-table"><div class="loading">Memuat data...</div></div>
+    </div>
+  </div>
+
+  <div id="tab-daftar" class="tab-content">
+    <div class="card">
+      <h2>Buat Rapat Baru</h2>
+      <form id="form-rapat">
+        <div class="form-grid">
+          <div class="form-row">
+            <label>Judul Rapat *</label>
+            <input type="text" id="f-judul" required>
+          </div>
+          <div class="form-row">
+            <label>Unit / Penyelenggara</label>
+            <input type="text" id="f-unit" placeholder="Mis. Divisi Keuangan">
+          </div>
+          <div class="form-row">
+            <label>Tanggal *</label>
+            <input type="date" id="f-tanggal" required>
+          </div>
+          <div class="form-row">
+            <label>Waktu *</label>
+            <input type="time" id="f-waktu" required>
+          </div>
+          <div class="form-row">
+            <label>Tempat *</label>
+            <input type="text" id="f-tempat" required>
+          </div>
+          <div class="form-row">
+            <label>Penyelenggara / PIC</label>
+            <input type="text" id="f-penyelenggara">
+          </div>
+        </div>
+        <div class="form-row">
+          <label>Agenda</label>
+          <textarea id="f-agenda" placeholder="Poin-poin agenda rapat"></textarea>
+        </div>
+        <button type="submit" class="btn">Simpan Rapat</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Daftar Rapat</h2>
+      <div id="rapat-list"><div class="loading">Memuat data...</div></div>
+    </div>
+  </div>
+
+</main>
+
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script>
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+function statusBadge(status) {
+  const map = { 'Terjadwal': 'yellow', 'Selesai': 'green', 'Dibatalkan': 'red' };
+  return `<span class="badge ${map[status] || 'gray'}">${escapeHtml(status)}</span>`;
+}
+
+async function loadRapatList() {
+  const el = document.getElementById('rapat-list');
+  const data = await apiGet('listRapat');
+  if (data.error) { el.innerHTML = `<div class="empty-state">${escapeHtml(data.error)}</div>`; return; }
+  if (!data.length) { el.innerHTML = '<div class="empty-state">Belum ada rapat. Buat rapat baru di atas.</div>'; return; }
+  el.innerHTML = `<table><thead><tr>
+      <th>Judul</th><th>Tanggal</th><th>Waktu</th><th>Tempat</th><th>Status</th><th></th>
+    </tr></thead><tbody>
+    ${data.map(r => `
+      <tr>
+        <td><strong>${escapeHtml(r.Judul)}</strong><br><span style="color:var(--muted);font-size:0.78rem">${escapeHtml(r.Unit || '')}</span></td>
+        <td>${escapeHtml(r.Tanggal)}</td>
+        <td>${escapeHtml(r.Waktu)}</td>
+        <td>${escapeHtml(r.Tempat)}</td>
+        <td>${statusBadge(r.Status)}</td>
+        <td><a class="btn small" href="rapat.html?id=${encodeURIComponent(r.ID)}">Kelola</a></td>
+      </tr>
+    `).join('')}
+    </tbody></table>`;
+}
+
+async function loadRekap() {
+  const statsEl = document.getElementById('rekap-stats');
+  const tableEl = document.getElementById('rekap-table');
+  const data = await apiGet('getRekap');
+  if (data.error) { tableEl.innerHTML = `<div class="empty-state">${escapeHtml(data.error)}</div>`; return; }
+
+  const totalRapat = data.length;
+  const totalHadir = data.reduce((a, r) => a + r.jumlahHadir, 0);
+  const totalDiundang = data.reduce((a, r) => a + r.jumlahDiundang, 0);
+  const rataHadir = totalDiundang ? Math.round((totalHadir / totalDiundang) * 100) : 0;
+  const adaNotulenCount = data.filter(r => r.adaNotulen).length;
+
+  statsEl.innerHTML = `
+    <div class="stat-box"><div class="num">${totalRapat}</div><div class="label">Total Rapat</div></div>
+    <div class="stat-box"><div class="num">${rataHadir}%</div><div class="label">Rata-rata Kehadiran</div></div>
+    <div class="stat-box"><div class="num">${adaNotulenCount}/${totalRapat}</div><div class="label">Sudah Ada Notulen</div></div>
+  `;
+
+  if (!data.length) { tableEl.innerHTML = '<div class="empty-state">Belum ada data rapat.</div>'; return; }
+
+  tableEl.innerHTML = `<table><thead><tr>
+      <th>Judul</th><th>Tanggal</th><th>Undangan</th><th>Hadir</th><th>Materi</th><th>Notulen</th><th></th>
+    </tr></thead><tbody>
+    ${data.map(r => `
+      <tr>
+        <td><strong>${escapeHtml(r.judul)}</strong></td>
+        <td>${escapeHtml(r.tanggal)}</td>
+        <td>${r.undanganTerkirim}/${r.jumlahDiundang} terkirim</td>
+        <td>${r.jumlahHadir} orang (${r.persenHadir}%)</td>
+        <td>${r.jumlahMateri} file</td>
+        <td>${r.adaNotulen ? '<span class="badge green">Ada</span>' : '<span class="badge gray">Belum</span>'}</td>
+        <td><a class="btn small secondary" href="rapat.html?id=${encodeURIComponent(r.id)}">Detail</a></td>
+      </tr>
+    `).join('')}
+    </tbody></table>`;
+}
+
+document.getElementById('form-rapat').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button');
+  btn.disabled = true; btn.textContent = 'Menyimpan...';
+  const payload = {
+    judul: document.getElementById('f-judul').value,
+    unit: document.getElementById('f-unit').value,
+    tanggal: document.getElementById('f-tanggal').value,
+    waktu: document.getElementById('f-waktu').value,
+    tempat: document.getElementById('f-tempat').value,
+    penyelenggara: document.getElementById('f-penyelenggara').value,
+    agenda: document.getElementById('f-agenda').value
+  };
+  const result = await apiPost('createRapat', payload);
+  btn.disabled = false; btn.textContent = 'Simpan Rapat';
+  if (result.error) { showToast('Gagal: ' + result.error); return; }
+  showToast('Rapat berhasil dibuat');
+  e.target.reset();
+  loadRapatList();
+  loadRekap();
+});
+
+loadRapatList();
+loadRekap();
+</script>
+</body>
+</html>
