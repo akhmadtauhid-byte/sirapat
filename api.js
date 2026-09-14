@@ -23,8 +23,8 @@ function jsonpRequest(action, params) {
     };
     const timer = setTimeout(() => {
       cleanup();
-      reject(new Error('Waktu permintaan habis. Periksa koneksi atau URL API_URL di config.js.'));
-    }, 20000);
+      reject(new Error('Waktu permintaan habis. Apps Script mungkin sedang lambat/cold-start - coba muat ulang halaman.'));
+    }, 35000);
 
     window[callbackName] = (data) => {
       clearTimeout(timer);
