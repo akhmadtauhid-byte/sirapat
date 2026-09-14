@@ -103,19 +103,21 @@ async function render() {
   }
   document.getElementById('toolbar-info').textContent = jenisLabel[jenis];
 
-  const rapat = await apiGet('getRapat', { id: rapatId });
-  if (rapat.error) { contentEl.innerHTML = `<p class="empty-note">${escapeHtml(rapat.error)}</p>`; return; }
+  // Satu panggilan gabungan (getRapatDetail) supaya tidak membebani Apps
+  // Script dengan beberapa eksekusi bersamaan.
+  const detail = await apiGet('getRapatDetail', { rapatId });
+  if (detail.error) { contentEl.innerHTML = `<p class="empty-note">${escapeHtml(detail.error)}</p>`; return; }
+  const rapat = detail.rapat;
   document.title = jenisLabel[jenis] + ' - ' + rapat.Judul;
 
-  if (jenis === 'undangan') return renderUndangan(rapat);
-  if (jenis === 'materi') return renderMateri(rapat);
-  if (jenis === 'absensi') return renderAbsensi(rapat);
-  if (jenis === 'notulen') return renderNotulen(rapat);
+  if (jenis === 'undangan') return renderUndangan(rapat, detail.peserta);
+  if (jenis === 'materi') return renderMateri(rapat, detail.materi);
+  if (jenis === 'absensi') return renderAbsensi(rapat, detail.peserta, detail.absensi);
+  if (jenis === 'notulen') return renderNotulen(rapat, detail.peserta, detail.absensi, detail.notulen);
 }
 
 // ================= UNDANGAN =================
-async function renderUndangan(rapat) {
-  const peserta = await apiGet('listPeserta', { rapatId });
+async function renderUndangan(rapat, peserta) {
   const agendaList = (rapat.Agenda || '-').split('\n').filter(x => x.trim());
 
   document.getElementById('content').innerHTML = `
@@ -176,8 +178,7 @@ async function renderUndangan(rapat) {
 }
 
 // ================= MATERI =================
-async function renderMateri(rapat) {
-  const materi = await apiGet('listMateri', { rapatId });
+async function renderMateri(rapat, materi) {
   document.getElementById('content').innerHTML = `
     ${kopSurat()}
     <div class="judul-dokumen">Daftar Materi Rapat</div>
@@ -208,11 +209,7 @@ async function renderMateri(rapat) {
 }
 
 // ================= ABSENSI (DAFTAR HADIR) =================
-async function renderAbsensi(rapat) {
-  const [peserta, absensi] = await Promise.all([
-    apiGet('listPeserta', { rapatId }),
-    apiGet('listAbsensi', { rapatId })
-  ]);
+async function renderAbsensi(rapat, peserta, absensi) {
   const hadirIds = new Set(absensi.filter(a => a.PesertaID).map(a => a.PesertaID));
   const belumHadir = peserta.filter(p => !hadirIds.has(p.ID));
 
@@ -269,12 +266,7 @@ async function renderAbsensi(rapat) {
 }
 
 // ================= NOTULEN =================
-async function renderNotulen(rapat) {
-  const [peserta, absensi, notulenList] = await Promise.all([
-    apiGet('listPeserta', { rapatId }),
-    apiGet('listAbsensi', { rapatId }),
-    apiGet('listNotulen', { rapatId })
-  ]);
+async function renderNotulen(rapat, peserta, absensi, notulenList) {
   const notulisTerakhir = notulenList.length ? notulenList[notulenList.length - 1].Notulis : '';
 
   document.getElementById('content').innerHTML = `
