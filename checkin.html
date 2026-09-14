@@ -85,11 +85,14 @@ function setupSignaturePad() {
   const canvas = document.getElementById('sig-pad');
   const ctx = canvas.getContext('2d');
   function resize() {
-    const ratio = window.devicePixelRatio || 1;
+    // Resolusi dibatasi (ratio maksimal 1) agar hasil tanda tangan tidak
+    // terlalu besar saat dikirim - data dikirim lewat parameter URL (JSONP),
+    // jadi ukurannya perlu tetap kecil.
+    const ratio = Math.min(window.devicePixelRatio || 1, 1);
     canvas.width = canvas.offsetWidth * ratio;
     canvas.height = canvas.offsetHeight * ratio;
     ctx.scale(ratio, ratio);
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.2;
     ctx.lineCap = 'round';
     ctx.strokeStyle = '#1f2a27';
   }
@@ -124,13 +127,28 @@ async function submitCheckin(info) {
   const btn = document.getElementById('btn-checkin');
   btn.disabled = true; btn.textContent = 'Menyimpan...';
 
+  // Data dikirim lewat parameter URL (JSONP), jadi tanda tangan dikompres
+  // dan dibatasi ukurannya agar tidak gagal karena URL kepanjangan.
   let tandaTanganBase64 = '';
-  try { tandaTanganBase64 = signaturePad.toDataURL('image/png'); } catch (e) {}
+  try {
+    tandaTanganBase64 = signaturePad.toDataURL('image/jpeg', 0.6);
+    if (tandaTanganBase64.length > 25000) {
+      tandaTanganBase64 = ''; // terlalu besar, lewati saja - kehadiran tetap tercatat
+      msgEl.innerHTML = '<span style="color:var(--muted)">Catatan: tanda tangan tidak disertakan (terlalu besar), kehadiran tetap disimpan.</span>';
+    }
+  } catch (e) {}
 
   const payload = {
     rapatId, token, pesertaId: selectedPesertaId, nama, jabatan, tandaTanganBase64
   };
-  const result = await apiPost('checkIn', payload);
+  let result;
+  try {
+    result = await apiPost('checkIn', payload);
+  } catch (err) {
+    btn.disabled = false; btn.textContent = 'Konfirmasi Hadir';
+    msgEl.innerHTML = `<span style="color:var(--danger)">${escapeHtml(err.message)}</span>`;
+    return;
+  }
   btn.disabled = false; btn.textContent = 'Konfirmasi Hadir';
 
   if (result.error) {
