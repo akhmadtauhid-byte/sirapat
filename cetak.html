@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cetak Dokumen - SIRAPAT</title>
+<style>
+  :root { --text:#1a1a1a; --muted:#555; --border:#000; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Times New Roman', Times, serif; color: var(--text); margin: 0; background: #e9e9e9; }
+  .toolbar {
+    position: sticky; top: 0; background: #0f6e5f; color: #fff; padding: 10px 16px;
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-family: Arial, sans-serif;
+    z-index: 10;
+  }
+  .toolbar a, .toolbar button {
+    background: #fff; color: #0f6e5f; border: none; padding: 8px 14px; border-radius: 6px;
+    font-size: 0.85rem; cursor: pointer; text-decoration: none; font-weight: 600;
+  }
+  .toolbar .info { margin-left: auto; font-size: 0.8rem; opacity: 0.9; }
+  .sheet {
+    background: #fff; max-width: 210mm; margin: 20px auto; padding: 20mm 18mm;
+    box-shadow: 0 0 8px rgba(0,0,0,0.2); font-size: 12.5pt; line-height: 1.55;
+  }
+  .kop { display: flex; align-items: center; gap: 14px; border-bottom: 3px solid var(--border); padding-bottom: 8px; margin-bottom: 4px; }
+  .kop img { height: 70px; }
+  .kop .nama-rs { font-size: 16pt; font-weight: bold; letter-spacing: 0.5px; }
+  .kop .alamat-rs { font-size: 9.5pt; color: var(--muted); }
+  .kop-sub { border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+  .judul-dokumen { text-align: center; font-weight: bold; text-decoration: underline; font-size: 13.5pt; margin: 14px 0 4px; text-transform: uppercase; }
+  .subjudul { text-align: center; font-size: 11.5pt; margin-bottom: 18px; }
+  table.info-table { border-collapse: collapse; margin-bottom: 14px; }
+  table.info-table td { padding: 1px 6px 1px 0; vertical-align: top; font-size: 11.5pt; }
+  table.data { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 11pt; }
+  table.data th, table.data td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
+  table.data th { background: #eee; font-weight: bold; text-align: center; }
+  .ttd-block { display: flex; justify-content: space-between; margin-top: 40px; }
+  .ttd-col { text-align: center; width: 45%; }
+  .ttd-space { height: 70px; }
+  .paragraf { text-align: justify; margin: 10px 0; }
+  .muted { color: var(--muted); font-size: 10.5pt; }
+  .sig-img { max-height: 45px; max-width: 100px; }
+  .empty-note { text-align: center; color: var(--muted); font-style: italic; padding: 30px; font-family: Arial, sans-serif; }
+  @media print {
+    body { background: #fff; }
+    .toolbar { display: none; }
+    .sheet { box-shadow: none; margin: 0; max-width: 100%; padding: 12mm 15mm; }
+    @page { size: A4; margin: 12mm; }
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <a id="back-link" href="rapat.html">&larr; Kembali</a>
+  <button onclick="window.print()">🖨️ Cetak / Simpan PDF</button>
+  <span class="info" id="toolbar-info"></span>
+</div>
+
+<div id="content" class="sheet"><p class="empty-note">Memuat dokumen...</p></div>
+
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const rapatId = params.get('id');
+const jenis = params.get('jenis'); // undangan | materi | absensi | notulen
+document.getElementById('back-link').href = 'rapat.html?id=' + encodeURIComponent(rapatId || '');
+
+const jenisLabel = { undangan: 'Surat Undangan', materi: 'Daftar Materi', absensi: 'Daftar Hadir', notulen: 'Notulen Rapat' };
+
+function kopSurat() {
+  return `
+    <div class="kop">
+      ${HOSPITAL_LOGO_URL ? `<img src="${HOSPITAL_LOGO_URL}" alt="Logo">` : ''}
+      <div>
+        <div class="nama-rs">${escapeHtml(HOSPITAL_NAME)}</div>
+        <div class="alamat-rs">${escapeHtml(HOSPITAL_ADDRESS)}${HOSPITAL_CONTACT ? ' &bull; ' + escapeHtml(HOSPITAL_CONTACT) : ''}</div>
+      </div>
+    </div>
+    <div class="kop-sub">&nbsp;</div>
+  `;
+}
+
+function fmtTgl(tgl) {
+  if (!tgl) return '-';
+  try {
+    const d = new Date(tgl + 'T00:00:00');
+    if (isNaN(d)) return tgl;
+    return d.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  } catch (e) { return tgl; }
+}
+
+function todayLong() {
+  return new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+async function render() {
+  const contentEl = document.getElementById('content');
+  if (!rapatId || !jenis || !jenisLabel[jenis]) {
+    contentEl.innerHTML = '<p class="empty-note">Parameter tidak lengkap. Buka halaman ini lewat tombol Cetak pada halaman detail rapat.</p>';
+    return;
+  }
+  document.getElementById('toolbar-info').textContent = jenisLabel[jenis];
+
+  const rapat = await apiGet('getRapat', { id: rapatId });
+  if (rapat.error) { contentEl.innerHTML = `<p class="empty-note">${escapeHtml(rapat.error)}</p>`; return; }
+  document.title = jenisLabel[jenis] + ' - ' + rapat.Judul;
+
+  if (jenis === 'undangan') return renderUndangan(rapat);
+  if (jenis === 'materi') return renderMateri(rapat);
+  if (jenis === 'absensi') return renderAbsensi(rapat);
+  if (jenis === 'notulen') return renderNotulen(rapat);
+}
+
+// ================= UNDANGAN =================
+async function renderUndangan(rapat) {
+  const peserta = await apiGet('listPeserta', { rapatId });
+  const agendaList = (rapat.Agenda || '-').split('\n').filter(x => x.trim());
+
+  document.getElementById('content').innerHTML = `
+    ${kopSurat()}
+    <table class="info-table" style="width:100%">
+      <tr>
+        <td style="width:60%">
+          Nomor&nbsp;&nbsp;&nbsp;&nbsp;: ${escapeHtml(rapat.NomorSurat || '-')}<br>
+          Lampiran : 1 (satu) berkas<br>
+          Perihal&nbsp;&nbsp;&nbsp;: <strong>Undangan Rapat ${escapeHtml(rapat.Judul)}</strong>
+        </td>
+        <td style="text-align:right;vertical-align:top">${escapeHtml(HOSPITAL_ADDRESS.split(',')[0] || '')}, ${todayLong()}</td>
+      </tr>
+    </table>
+
+    <p style="margin:18px 0 4px">Kepada Yth.<br>Bapak/Ibu Peserta Rapat<br>(daftar terlampir)<br>di Tempat</p>
+
+    <p class="paragraf">Assalamu'alaikum Warahmatullahi Wabarakatuh,</p>
+    ${rapat.KataPengantar ? `<p class="paragraf">${escapeHtml(rapat.KataPengantar).replace(/\n/g, '<br>')}</p>` : ''}
+    <p class="paragraf">Sehubungan dengan hal tersebut, kami mengundang Bapak/Ibu untuk hadir pada:</p>
+
+    <table class="info-table" style="margin-left:20px">
+      <tr><td style="width:110px">Hari/Tanggal</td><td>: ${escapeHtml(fmtTgl(rapat.Tanggal))}</td></tr>
+      <tr><td>Waktu</td><td>: ${escapeHtml(rapat.Waktu)} WIB s.d. selesai</td></tr>
+      <tr><td>Tempat</td><td>: ${escapeHtml(rapat.Tempat)}</td></tr>
+      <tr><td>Acara</td><td>: ${escapeHtml(rapat.Judul)}</td></tr>
+    </table>
+
+    <p style="margin:14px 0 4px">Dengan agenda sebagai berikut:</p>
+    <ol style="margin:0 0 10px">
+      ${agendaList.length ? agendaList.map(a => `<li>${escapeHtml(a)}</li>`).join('') : '<li>-</li>'}
+    </ol>
+
+    <p class="paragraf">Demikian undangan ini kami sampaikan. Atas perhatian dan kehadiran Bapak/Ibu, kami ucapkan terima kasih.</p>
+    <p class="paragraf">Wassalamu'alaikum Warahmatullahi Wabarakatuh.</p>
+
+    <div class="ttd-block">
+      <div class="ttd-col"></div>
+      <div class="ttd-col">
+        Mengetahui,<br>${escapeHtml(rapat.Unit || 'Panitia Rapat')}
+        <div class="ttd-space"></div>
+        <strong>${escapeHtml(rapat.Penyelenggara || '(_______________________)')}</strong>
+      </div>
+    </div>
+
+    <div style="page-break-before: always; padding-top: 10mm;">
+      ${kopSurat()}
+      <p style="text-align:center;font-weight:bold;text-decoration:underline;margin-bottom:14px">LAMPIRAN DAFTAR PESERTA YANG DIUNDANG</p>
+      <p class="muted" style="margin-top:-8px">${escapeHtml(rapat.Judul)} &bull; ${escapeHtml(fmtTgl(rapat.Tanggal))}</p>
+      <table class="data">
+        <thead><tr><th style="width:40px">No</th><th>Nama</th><th>Jabatan/Unit</th><th>No. WA</th></tr></thead>
+        <tbody>
+          ${peserta.length ? peserta.map((p, i) => `<tr><td style="text-align:center">${i + 1}</td><td>${escapeHtml(p.Nama)}</td><td>${escapeHtml(p.Jabatan)}</td><td>${escapeHtml(p.NoWA)}</td></tr>`).join('') : '<tr><td colspan="4" style="text-align:center">Belum ada peserta</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ================= MATERI =================
+async function renderMateri(rapat) {
+  const materi = await apiGet('listMateri', { rapatId });
+  document.getElementById('content').innerHTML = `
+    ${kopSurat()}
+    <div class="judul-dokumen">Daftar Materi Rapat</div>
+    <div class="subjudul">${escapeHtml(rapat.Judul)}</div>
+    <table class="info-table">
+      <tr><td style="width:110px">Hari/Tanggal</td><td>: ${escapeHtml(fmtTgl(rapat.Tanggal))}</td></tr>
+      <tr><td>Waktu</td><td>: ${escapeHtml(rapat.Waktu)} WIB</td></tr>
+      <tr><td>Tempat</td><td>: ${escapeHtml(rapat.Tempat)}</td></tr>
+    </table>
+
+    <table class="data">
+      <thead><tr><th style="width:40px">No</th><th>Nama Materi</th><th>Deskripsi</th><th>Referensi / Link</th></tr></thead>
+      <tbody>
+        ${materi.length ? materi.map((m, i) => `<tr><td style="text-align:center">${i + 1}</td><td>${escapeHtml(m.NamaFile)}</td><td>${escapeHtml(m.Deskripsi || '-')}</td><td style="word-break:break-all">${escapeHtml(m.LinkFile)}</td></tr>`).join('') : '<tr><td colspan="4" style="text-align:center">Belum ada materi diunggah</td></tr>'}
+      </tbody>
+    </table>
+    <p class="muted">Materi rapat di atas telah disiapkan/didistribusikan sebelum pelaksanaan rapat sebagai bahan pembahasan peserta.</p>
+
+    <div class="ttd-block">
+      <div class="ttd-col"></div>
+      <div class="ttd-col">
+        Mengetahui,<br>${escapeHtml(rapat.Unit || 'Panitia Rapat')}
+        <div class="ttd-space"></div>
+        <strong>${escapeHtml(rapat.Penyelenggara || '(_______________________)')}</strong>
+      </div>
+    </div>
+  `;
+}
+
+// ================= ABSENSI (DAFTAR HADIR) =================
+async function renderAbsensi(rapat) {
+  const [peserta, absensi] = await Promise.all([
+    apiGet('listPeserta', { rapatId }),
+    apiGet('listAbsensi', { rapatId })
+  ]);
+  const hadirIds = new Set(absensi.filter(a => a.PesertaID).map(a => a.PesertaID));
+  const belumHadir = peserta.filter(p => !hadirIds.has(p.ID));
+
+  document.getElementById('content').innerHTML = `
+    ${kopSurat()}
+    <div class="judul-dokumen">Daftar Hadir Rapat</div>
+    <div class="subjudul">${escapeHtml(rapat.Judul)}</div>
+    <table class="info-table">
+      <tr><td style="width:110px">Hari/Tanggal</td><td>: ${escapeHtml(fmtTgl(rapat.Tanggal))}</td></tr>
+      <tr><td>Waktu</td><td>: ${escapeHtml(rapat.Waktu)} WIB</td></tr>
+      <tr><td>Tempat</td><td>: ${escapeHtml(rapat.Tempat)}</td></tr>
+      <tr><td>Pimpinan Rapat</td><td>: ${escapeHtml(rapat.Penyelenggara || '-')}</td></tr>
+    </table>
+
+    <table class="data">
+      <thead><tr><th style="width:40px">No</th><th>Nama</th><th>Jabatan/Unit</th><th>Waktu Hadir</th><th style="width:120px">Tanda Tangan</th></tr></thead>
+      <tbody>
+        ${absensi.length ? absensi.map((a, i) => `
+          <tr>
+            <td style="text-align:center">${i + 1}</td>
+            <td>${escapeHtml(a.Nama)}</td>
+            <td>${escapeHtml(a.Jabatan)}</td>
+            <td>${escapeHtml(a.WaktuHadir)}</td>
+            <td style="text-align:center">${a.TandaTanganUrl ? `<img class="sig-img" src="${escapeHtml(a.TandaTanganUrl)}">` : ''}</td>
+          </tr>
+        `).join('') : ''}
+        ${belumHadir.map((p, i) => `
+          <tr>
+            <td style="text-align:center">${absensi.length + i + 1}</td>
+            <td>${escapeHtml(p.Nama)}</td>
+            <td>${escapeHtml(p.Jabatan)}</td>
+            <td class="muted" style="text-align:center">(belum absen - isi manual)</td>
+            <td></td>
+          </tr>
+        `).join('')}
+        ${(!absensi.length && !belumHadir.length) ? '<tr><td colspan="5" style="text-align:center">Belum ada data peserta/kehadiran</td></tr>' : ''}
+      </tbody>
+    </table>
+    <p class="muted">Jumlah hadir: ${absensi.length} dari ${peserta.length} peserta yang diundang (${peserta.length ? Math.round(absensi.length / peserta.length * 100) : 0}%).</p>
+
+    <div class="ttd-block">
+      <div class="ttd-col">
+        Mengetahui,<br>Pimpinan Rapat
+        <div class="ttd-space"></div>
+        <strong>${escapeHtml(rapat.Penyelenggara || '(_______________________)')}</strong>
+      </div>
+      <div class="ttd-col">
+        Petugas Absensi,
+        <div class="ttd-space"></div>
+        <strong>(_______________________)</strong>
+      </div>
+    </div>
+  `;
+}
+
+// ================= NOTULEN =================
+async function renderNotulen(rapat) {
+  const [peserta, absensi, notulenList] = await Promise.all([
+    apiGet('listPeserta', { rapatId }),
+    apiGet('listAbsensi', { rapatId }),
+    apiGet('listNotulen', { rapatId })
+  ]);
+  const notulisTerakhir = notulenList.length ? notulenList[notulenList.length - 1].Notulis : '';
+
+  document.getElementById('content').innerHTML = `
+    ${kopSurat()}
+    <div class="judul-dokumen">Notulen Rapat</div>
+    <div class="subjudul">${escapeHtml(rapat.Judul)}</div>
+    <table class="info-table">
+      <tr><td style="width:130px">Hari/Tanggal</td><td>: ${escapeHtml(fmtTgl(rapat.Tanggal))}</td></tr>
+      <tr><td>Waktu</td><td>: ${escapeHtml(rapat.Waktu)} WIB</td></tr>
+      <tr><td>Tempat</td><td>: ${escapeHtml(rapat.Tempat)}</td></tr>
+      <tr><td>Pimpinan Rapat</td><td>: ${escapeHtml(rapat.Penyelenggara || '-')}</td></tr>
+      <tr><td>Notulis</td><td>: ${escapeHtml(notulisTerakhir || '-')}</td></tr>
+      <tr><td>Jumlah Peserta Hadir</td><td>: ${absensi.length} dari ${peserta.length} peserta yang diundang</td></tr>
+    </table>
+
+    <p style="margin:14px 0 4px"><strong>Agenda:</strong></p>
+    <p class="paragraf" style="margin-top:0">${escapeHtml(rapat.Agenda || '-').replace(/\n/g, '<br>')}</p>
+
+    <p style="margin:14px 0 4px"><strong>Hasil Pembahasan:</strong></p>
+    <table class="data">
+      <thead><tr><th style="width:30px">No</th><th>Pembahasan</th><th>Keputusan</th><th>Tindak Lanjut</th><th style="width:90px">PIC</th><th style="width:80px">Deadline</th></tr></thead>
+      <tbody>
+        ${notulenList.length ? notulenList.map((n, i) => `
+          <tr>
+            <td style="text-align:center">${i + 1}</td>
+            <td>${escapeHtml(n.Pembahasan).replace(/\n/g, '<br>')}</td>
+            <td>${escapeHtml(n.Keputusan || '-').replace(/\n/g, '<br>')}</td>
+            <td>${escapeHtml(n.TindakLanjut || '-')}</td>
+            <td>${escapeHtml(n.PenanggungJawab || '-')}</td>
+            <td>${escapeHtml(n.Deadline || '-')}</td>
+          </tr>
+        `).join('') : '<tr><td colspan="6" style="text-align:center">Belum ada notulen dicatat</td></tr>'}
+      </tbody>
+    </table>
+
+    <p class="paragraf">Demikian notulen rapat ini dibuat untuk digunakan sebagaimana mestinya.</p>
+
+    <div class="ttd-block">
+      <div class="ttd-col">
+        Notulis,
+        <div class="ttd-space"></div>
+        <strong>${escapeHtml(notulisTerakhir || '(_______________________)')}</strong>
+      </div>
+      <div class="ttd-col">
+        Mengetahui,<br>Pimpinan Rapat,
+        <div class="ttd-space"></div>
+        <strong>${escapeHtml(rapat.Penyelenggara || '(_______________________)')}</strong>
+      </div>
+    </div>
+  `;
+}
+
+render();
+</script>
+</body>
+</html>
