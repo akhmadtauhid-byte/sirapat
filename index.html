@@ -59,7 +59,16 @@
             <label>Penyelenggara / PIC</label>
             <input type="text" id="f-penyelenggara">
           </div>
+          <div class="form-row">
+            <label>Nomor Surat Undangan</label>
+            <input type="text" id="f-nomor-surat" placeholder="Mis. 005/UND/RSAM/IX/2026">
+          </div>
         </div>
+        <div class="form-row">
+          <label>Kata Pengantar Undangan</label>
+          <textarea id="f-kata-pengantar" placeholder="Kalimat pembuka surat undangan, mis. 'Sehubungan dengan pelaksanaan evaluasi program kerja triwulan III, dengan ini kami mengundang Bapak/Ibu untuk hadir pada rapat sebagai berikut:'"></textarea>
+          <p style="color:var(--muted);font-size:0.8rem;margin:4px 0 0">Kalimat ini akan muncul sebagai pembuka pada surat undangan cetak dan pesan WhatsApp, sebelum daftar agenda.</p>
+          </div>
         <div class="form-row">
           <label>Agenda</label>
           <textarea id="f-agenda" placeholder="Poin-poin agenda rapat"></textarea>
@@ -162,6 +171,8 @@ document.getElementById('form-rapat').addEventListener('submit', async (e) => {
     waktu: document.getElementById('f-waktu').value,
     tempat: document.getElementById('f-tempat').value,
     penyelenggara: document.getElementById('f-penyelenggara').value,
+    nomorSurat: document.getElementById('f-nomor-surat').value,
+    kataPengantar: document.getElementById('f-kata-pengantar').value,
     agenda: document.getElementById('f-agenda').value
   };
   const result = await apiPost('createRapat', payload);
